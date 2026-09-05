@@ -1,0 +1,24 @@
+import pytest
+from app.modules.ai_engine.mock_provider import MockProvider
+from app.modules.ai_engine import get_ai_provider
+
+
+@pytest.mark.asyncio
+async def test_mock_ai_provider():
+    provider = MockProvider()
+    assert provider.provider_name == "mock-provider"
+
+    res = await provider.generate(
+        prompt="Write a test prompt",
+        system_instruction="STRICT MODE system instruction",
+    )
+
+    assert "[MOCK AI OUTPUT]" in res
+    assert "Detected Mode: strict" in res
+    assert "Write a test prompt" in res
+
+
+def test_get_ai_provider_fallback():
+    provider = get_ai_provider()
+    # When OPENAI_API_KEY is empty in test environment, provider should be MockProvider or OpenAIProvider
+    assert hasattr(provider, "generate")
