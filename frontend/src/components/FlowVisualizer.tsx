@@ -15,7 +15,7 @@ import {
 import { ProcessResponse } from "@/lib/api";
 
 interface FlowVisualizerProps {
-  currentStep: "idle" | "input" | "extraction" | "ai_engine" | "output" | "failed";
+  currentStep: "idle" | "input" | "extraction" | "ai_engine" | "output" | "completed" | "failed";
   lastResponse: ProcessResponse | null;
   mode: string;
   filesCount: number;
@@ -59,6 +59,7 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({
       if (lastResponse?.pipeline_step === stepId) return "failed";
     }
     if (currentStep === "idle") return "idle";
+    if (currentStep === "completed") return "completed";
 
     const stepOrder = ["input", "extraction", "ai_engine", "output"];
     const currentIndex = stepOrder.indexOf(currentStep);
@@ -89,13 +90,13 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({
               <span>Pipeline Idle</span>
             </span>
           )}
-          {["input", "extraction", "ai_engine"].includes(currentStep) && (
+          {["input", "extraction", "ai_engine", "output"].includes(currentStep) && (
             <span className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-mono animate-pulse">
               <div className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
               <span>Processing: {currentStep.toUpperCase()}</span>
             </span>
           )}
-          {currentStep === "output" && (
+          {currentStep === "completed" && (
             <span className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Completed</span>

@@ -14,7 +14,9 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [currentStep, setCurrentStep] = useState<"idle" | "input" | "extraction" | "ai_engine" | "output" | "failed">("idle");
+  const [currentStep, setCurrentStep] = useState<
+    "idle" | "input" | "extraction" | "ai_engine" | "output" | "completed" | "failed"
+  >("idle");
   const [lastResponse, setLastResponse] = useState<ProcessResponse | null>(null);
 
   useEffect(() => {
@@ -41,27 +43,28 @@ export default function Home() {
     setLastResponse(null);
     setCurrentStep("input");
 
-    // Visual step progression feedback
-    setTimeout(() => {
-      if (files.length > 0 && mode !== "scratch") {
-        setCurrentStep("extraction");
-      } else {
-        setCurrentStep("ai_engine");
-      }
-    }, 400);
+    // Progressive step animation
+    if (files.length > 0 && mode !== "scratch") {
+      setTimeout(() => setCurrentStep("extraction"), 300);
+      setTimeout(() => setCurrentStep("ai_engine"), 700);
+    } else {
+      setTimeout(() => setCurrentStep("ai_engine"), 300);
+    }
 
-    setTimeout(async () => {
-      setCurrentStep("ai_engine");
+    try {
       const res = await processContent(mode, prompt, files);
       setLastResponse(res);
       setIsProcessing(false);
 
       if (res.success) {
-        setCurrentStep("output");
+        setCurrentStep("completed");
       } else {
         setCurrentStep("failed");
       }
-    }, 900);
+    } catch (e) {
+      setIsProcessing(false);
+      setCurrentStep("failed");
+    }
   };
 
   const handleClearOutput = () => {
