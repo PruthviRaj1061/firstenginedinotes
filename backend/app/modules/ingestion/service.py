@@ -26,8 +26,9 @@ class ContentIngestionService:
         ".webp": ImageExtractor(),
     }
 
-    def __init__(self):
-        self.max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+    @property
+    def max_bytes(self) -> int:
+        return settings.MAX_FILE_SIZE_MB * 1024 * 1024
 
     def validate_file(self, filename: str, file_bytes: bytes) -> Tuple[bool, str]:
         """
@@ -41,8 +42,9 @@ class ContentIngestionService:
             supported_str = ", ".join(sorted(self.SUPPORTED_EXTENSIONS.keys()))
             return False, f"Unsupported file type '{ext}'. Supported extensions: {supported_str}"
 
+        file_size_mb = len(file_bytes) / (1024 * 1024)
         if len(file_bytes) > self.max_bytes:
-            return False, f"File '{filename}' exceeds maximum allowed size of {settings.MAX_FILE_SIZE_MB}MB"
+            return False, f"File '{filename}' ({file_size_mb:.1f}MB) exceeds maximum allowed size of {settings.MAX_FILE_SIZE_MB}MB"
 
         return True, ""
 

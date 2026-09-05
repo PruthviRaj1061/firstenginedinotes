@@ -65,12 +65,16 @@ class ContentProcessor:
                 combined_source_content, extraction_results = ingestion_service.process_files_and_combine(files)
 
                 # Check if file extraction had critical failures
-                failed_files = [res.filename for res in extraction_results if res.extraction_status == "failed"]
-                if failed_files and not combined_source_content:
+                failed_details = [
+                    f"'{res.filename}' ({res.error_message})" if res.error_message else f"'{res.filename}'"
+                    for res in extraction_results
+                    if res.extraction_status == "failed"
+                ]
+                if failed_details and not combined_source_content:
                     return ProcessResponse(
                         success=False,
                         mode=mode.value,
-                        error=f"Failed to extract content from files: {', '.join(failed_files)}",
+                        error=f"Failed to extract content from files — {'; '.join(failed_details)}",
                         pipeline_step=PipelineStep.EXTRACTION,
                     )
 

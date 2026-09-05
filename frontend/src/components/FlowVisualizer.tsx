@@ -55,13 +55,20 @@ export const FlowVisualizer: React.FC<FlowVisualizerProps> = ({
   ];
 
   const getStepStatus = (stepId: string) => {
+    const stepOrder = ["input", "extraction", "ai_engine", "output"];
+
     if (currentStep === "failed") {
-      if (lastResponse?.pipeline_step === stepId) return "failed";
+      const failedStep = lastResponse?.pipeline_step || "input";
+      const failedIndex = stepOrder.indexOf(failedStep);
+      const stepIndex = stepOrder.indexOf(stepId);
+
+      if (stepIndex < failedIndex) return "completed";
+      if (stepIndex === failedIndex) return "failed";
+      return "idle";
     }
     if (currentStep === "idle") return "idle";
     if (currentStep === "completed") return "completed";
 
-    const stepOrder = ["input", "extraction", "ai_engine", "output"];
     const currentIndex = stepOrder.indexOf(currentStep);
     const stepIndex = stepOrder.indexOf(stepId);
 

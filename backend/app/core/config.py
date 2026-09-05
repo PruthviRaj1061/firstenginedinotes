@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     OPENAI_API_KEY: str = Field(default="", validation_alias="OPENAI_API_KEY")
     DEFAULT_MODEL: str = Field(default="nvidia/nemotron-3-super-120b-a12b:free", validation_alias="DEFAULT_MODEL")
-    MAX_FILE_SIZE_MB: int = Field(default=10, validation_alias="MAX_FILE_SIZE_MB")
+    MAX_FILE_SIZE_MB: int = Field(default=100, validation_alias="MAX_FILE_SIZE_MB")
     ALLOWED_ORIGINS: str = Field(
         default="http://localhost:3000,http://127.0.0.1:3000",
         validation_alias="ALLOWED_ORIGINS"
