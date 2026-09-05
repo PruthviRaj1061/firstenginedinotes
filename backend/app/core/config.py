@@ -8,8 +8,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Content Engine"
     API_V1_STR: str = "/api/v1"
     
+    OPENROUTER_API_KEY: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     OPENAI_API_KEY: str = Field(default="", validation_alias="OPENAI_API_KEY")
-    DEFAULT_MODEL: str = Field(default="gpt-4o-mini", validation_alias="DEFAULT_MODEL")
+    DEFAULT_MODEL: str = Field(default="nvidia/nemotron-3-super-120b-a12b:free", validation_alias="DEFAULT_MODEL")
     MAX_FILE_SIZE_MB: int = Field(default=10, validation_alias="MAX_FILE_SIZE_MB")
     ALLOWED_ORIGINS: str = Field(
         default="http://localhost:3000,http://127.0.0.1:3000",

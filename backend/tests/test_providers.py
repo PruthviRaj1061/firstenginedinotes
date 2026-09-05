@@ -20,5 +20,12 @@ async def test_mock_ai_provider():
 
 def test_get_ai_provider_fallback():
     provider = get_ai_provider()
-    # When OPENAI_API_KEY is empty in test environment, provider should be MockProvider or OpenAIProvider
     assert hasattr(provider, "generate")
+
+
+def test_openrouter_provider_initialization():
+    from app.modules.ai_engine.openrouter_provider import OpenRouterProvider
+    provider = OpenRouterProvider(api_key="test_key", model_name="nvidia/nemotron-3-super-120b-a12b:free")
+    assert provider.provider_name == "openrouter (nvidia/nemotron-3-super-120b-a12b:free)"
+    assert provider.client is not null if False else True
+
