@@ -33,13 +33,14 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = (ext: "md" | "txt" = "md") => {
     if (response?.content) {
-      const blob = new Blob([response.content], { type: "text/plain;charset=utf-8" });
+      const mime = ext === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8";
+      const blob = new Blob([response.content], { type: mime });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `ai-content-output-${Date.now()}.txt`;
+      link.download = `ai-content-output-${Date.now()}.${ext}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -84,15 +85,28 @@ export const OutputPanel: React.FC<OutputPanelProps> = ({
             )}
           </button>
 
+          {/* Download .md Button */}
           <button
             type="button"
-            onClick={handleDownload}
+            onClick={() => handleDownload("md")}
             disabled={!textContent}
-            title="Download as .txt"
+            title="Download output as Markdown file"
+            className="p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-xs flex items-center gap-1.5 font-medium"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>.md</span>
+          </button>
+
+          {/* Download .txt Button */}
+          <button
+            type="button"
+            onClick={() => handleDownload("txt")}
+            disabled={!textContent}
+            title="Download output as text file"
             className="p-2 rounded-lg bg-surface border border-surface-border text-gray-400 hover:text-white hover:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-xs flex items-center gap-1.5 font-medium"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Download</span>
+            <span className="hidden sm:inline">.txt</span>
           </button>
 
           <button

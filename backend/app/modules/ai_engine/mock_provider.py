@@ -11,6 +11,10 @@ class MockProvider(AIProvider):
     def provider_name(self) -> str:
         return "mock-provider"
 
+    @property
+    def supports_vision(self) -> bool:
+        return True
+
     async def generate(self, prompt: str, system_instruction: str = "") -> str:
         # Detect mode from system instruction or prompt if present
         mode_str = "unknown"
@@ -30,7 +34,18 @@ class MockProvider(AIProvider):
             f"{system_instruction[:150]}...\n\n"
             "Prompt Preview:\n"
             f"{prompt[:200]}...\n\n"
-            "Note: To enable live generation using GPT models, set 'OPENAI_API_KEY' in your .env file."
+            "Note: To enable live AI generation, set 'GROQ_API_KEY', 'GOOGLE_API_KEY', 'OPENROUTER_API_KEY', or 'OPENAI_API_KEY' in your .env file."
         )
 
         return mock_output
+
+    async def generate_with_vision(
+        self, image_bytes: bytes, prompt: str, system_instruction: str = ""
+    ) -> str:
+        # Provide deterministic mock visual analysis content for test verification
+        return (
+            "The image is a visual document element (chart/diagram/figure). "
+            "It displays a data trend with clearly visible headings, labels, and numbers. "
+            "Values increase progressively across key categories."
+        )
+

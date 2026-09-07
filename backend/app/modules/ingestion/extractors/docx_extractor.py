@@ -44,6 +44,8 @@ class DocxExtractor(BaseExtractor):
                     "word_count": word_count,
                 },
                 extraction_status=ExtractionStatus.SUCCESS if full_text else ExtractionStatus.PARTIAL,
+                extraction_method="docx",
+                output_format="markdown",
             )
         except Exception as e:
             return ExtractionResult(

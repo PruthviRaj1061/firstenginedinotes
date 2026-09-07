@@ -27,5 +27,20 @@ def test_openrouter_provider_initialization():
     from app.modules.ai_engine.openrouter_provider import OpenRouterProvider
     provider = OpenRouterProvider(api_key="test_key", model_name="nvidia/nemotron-3-super-120b-a12b:free")
     assert provider.provider_name == "openrouter (nvidia/nemotron-3-super-120b-a12b:free)"
-    assert provider.client is not null if False else True
+
+
+def test_google_gemini_provider_initialization():
+    from app.modules.ai_engine.google_provider import GoogleGeminiProvider
+    provider = GoogleGeminiProvider(api_key="test_key", model_name="gemini-3.6-flash")
+    assert provider.provider_name == "google-gemini (gemini-3.6-flash)"
+    assert provider._configured is True
+
+
+def test_groq_provider_initialization():
+    from app.modules.ai_engine.groq_provider import GroqProvider
+    provider = GroqProvider(api_key="test_key", model_name="openai/gpt-oss-120b")
+    assert provider.provider_name == "groq (openai/gpt-oss-120b)"
+    assert provider.client is not None
+
+
 

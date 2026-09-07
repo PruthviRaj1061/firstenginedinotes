@@ -1,8 +1,19 @@
 import pytest
 from fastapi.testclient import TestClient
+from app.modules.ai_engine.mock_provider import MockProvider
 from app.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def override_ai_provider(monkeypatch):
+    import app.api.v1.endpoints.process as process_endpoint
+    import app.services.content_processor as content_processor_module
+
+    monkeypatch.setattr(process_endpoint, "get_ai_provider", lambda: MockProvider())
+    monkeypatch.setattr(content_processor_module, "get_ai_provider", lambda: MockProvider())
+
 
 
 def test_health_endpoint():

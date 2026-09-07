@@ -9,8 +9,12 @@ import {
   File,
   X,
   Play,
-  HelpCircle,
+  Download,
+  CheckCircle2,
+  Loader2,
+  Image as ImageIcon,
 } from "lucide-react";
+import { ConversionItem } from "@/lib/api";
 
 export type ModeType = "strict" | "non-strict" | "scratch";
 
@@ -21,8 +25,12 @@ interface LeftPanelProps {
   setPrompt: (p: string) => void;
   files: File[];
   setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  conversions: ConversionItem[];
+  combinedConversionId?: string;
+  isConverting: boolean;
   onProcess: () => void;
   isProcessing: boolean;
+  onDownloadMarkdown: (conversionId: string, filename: string) => void;
 }
 
 const SUPPORTED_EXTS = [".txt", ".md", ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"];
@@ -34,8 +42,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   setPrompt,
   files,
   setFiles,
+  conversions,
+  combinedConversionId,
+  isConverting,
   onProcess,
   isProcessing,
+  onDownloadMarkdown,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -76,6 +88,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   };
 
   const formatFileSize = (bytes: number) => {
+    if (!bytes || bytes <= 0) return "0 B";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -137,7 +150,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <div className="p-3 rounded-xl bg-surface border border-surface-border text-xs text-gray-300">
           {mode === "strict" && (
             <p className="leading-relaxed">
-              <strong className="text-blue-400">Strict Mode:</strong> Output is grounded <em>only</em> in uploaded content. Zero external knowledge, assumptions, or hallucinations allowed.
+              <strong className="text-blue-400">Strict Mode:</strong> AI output is strictly grounded <em>only</em> in uploaded content. Zero external knowledge or assumptions allowed.
             </p>
           )}
           {mode === "non-strict" && (
@@ -147,14 +160,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           )}
           {mode === "scratch" && (
             <p className="leading-relaxed">
-              <strong className="text-emerald-400">Scratch Mode:</strong> Direct prompt generation only. File uploads are optional/bypassed.
+              <strong className="text-emerald-400">Scratch Mode:</strong> Direct prompt generation. File uploads are optional/bypassed.
             </p>
           )}
         </div>
       </div>
 
       {/* 2. File Upload Area */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Source Material {mode === "scratch" ? "(Optional)" : "(Required)"}
@@ -183,7 +196,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             <p className="text-xs text-gray-300 font-medium">
               Drop files here or <span className="text-blue-400">browse</span>
             </p>
-            <p className="text-[10px] text-gray-500 mt-1">Multi-file support up to 10MB per file</p>
+            <p className="text-[10px] text-gray-500 mt-1">Converts automatically to Markdown (.md)</p>
           </div>
         ) : (
           <div className="p-3 rounded-xl bg-surface/30 border border-surface-border text-center text-xs text-gray-500 italic">
@@ -191,30 +204,104 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           </div>
         )}
 
-        {/* Selected Files List */}
-        {files.length > 0 && (
-          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-            {files.map((file, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between p-2 rounded-lg bg-surface border border-surface-border text-xs text-gray-300"
-              >
-                <div className="flex items-center space-x-2 truncate">
-                  <File className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                  <span className="truncate font-medium">{file.name}</span>
-                  <span className="text-[10px] text-gray-500 font-mono">
-                    ({formatFileSize(file.size)})
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeFile(idx)}
-                  className="text-gray-500 hover:text-rose-400 p-0.5 rounded transition-colors"
+        {/* Conversion Progress & Converted File Cards */}
+        {files.length > 0 && mode !== "scratch" && (
+          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+            {files.map((file, idx) => {
+              // Find matching conversion artifact for this file
+              const item = conversions.find((c) => c.original_filename === file.name);
+
+              return (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-[#090d16] border border-surface-border space-y-2 text-xs transition-all"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 truncate">
+                      <File className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span className="truncate font-medium text-gray-200">{file.name}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {formatFileSize(file.size)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(idx)}
+                        className="text-gray-500 hover:text-rose-400 p-0.5 rounded transition-colors"
+                        title="Remove file"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Status Indicator & Conversion Metrics */}
+                  {isConverting && !item ? (
+                    <div className="flex items-center space-x-2 text-blue-400 text-[11px] font-mono bg-blue-500/10 p-2 rounded-lg border border-blue-500/20">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Converting to Markdown...</span>
+                    </div>
+                  ) : item ? (
+                    <div className="space-y-2 pt-1 border-t border-surface-border/60">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="flex items-center space-x-1 text-emerald-400 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Converted to Markdown</span>
+                        </span>
+                        <span className="text-gray-400 font-mono text-[10px]">
+                          Markdown: <strong className="text-gray-200">{formatFileSize(item.markdown_size_bytes)}</strong>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                        <span>
+                          Method: <strong className="text-blue-300 uppercase">{item.extraction_method}</strong>
+                          {item.fallback_used && <span className="text-amber-400 ml-1">(Fallback)</span>}
+                        </span>
+                        <span>{item.char_count.toLocaleString()} chars</span>
+                      </div>
+
+                      {item.image_count !== undefined && item.image_count > 0 && (
+                        <div className="flex items-center justify-between text-[10px] bg-purple-950/30 border border-purple-500/20 px-2 py-1 rounded text-purple-300 font-mono">
+                          <span className="flex items-center gap-1">
+                            <ImageIcon className="w-3 h-3 text-purple-400" />
+                            <span>Images: {item.images_analyzed ?? 0}/{item.image_count} analyzed</span>
+                          </span>
+                          <span className="text-purple-400 font-semibold">{item.image_context_method || "Vision"}</span>
+                        </div>
+                      )}
+
+                      {/* Download .md Button */}
+                      <button
+                        type="button"
+                        onClick={() => onDownloadMarkdown(item.id, item.markdown_filename)}
+                        className="w-full py-1.5 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-medium text-[11px] flex items-center justify-center space-x-1.5 transition-all shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Download {item.markdown_filename}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-gray-500 italic">
+                      Ready for conversion
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Combined Download Button if multiple converted files */}
+            {conversions.length > 1 && combinedConversionId && (
+              <button
+                type="button"
+                onClick={() => onDownloadMarkdown(combinedConversionId, "combined_source.md")}
+                className="w-full py-2 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 font-medium text-xs flex items-center justify-center space-x-2 transition-all mt-2"
+              >
+                <Download className="w-4 h-4 text-purple-400" />
+                <span>Download Combined Markdown (.md)</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -252,9 +339,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       <button
         type="button"
         onClick={onProcess}
-        disabled={isProcessing}
+        disabled={isProcessing || isConverting}
         className={`w-full py-3 px-4 rounded-xl font-medium text-xs flex items-center justify-center space-x-2 transition-all shadow-lg ${
-          isProcessing
+          isProcessing || isConverting
             ? "bg-gray-700 text-gray-400 cursor-not-allowed"
             : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-blue-500/20 active:scale-[0.99]"
         }`}
@@ -262,7 +349,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         {isProcessing ? (
           <>
             <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            <span>Processing Pipeline...</span>
+            <span>Running AI Engine...</span>
+          </>
+        ) : isConverting ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            <span>Converting Files to Markdown...</span>
           </>
         ) : (
           <>

@@ -5,17 +5,28 @@ import { Header } from "@/components/Header";
 import { LeftPanel, ModeType } from "@/components/LeftPanel";
 import { FlowVisualizer } from "@/components/FlowVisualizer";
 import { OutputPanel } from "@/components/OutputPanel";
-import { checkHealth, processContent, ProcessResponse, HealthResponse } from "@/lib/api";
+import {
+  checkHealth,
+  convertFiles,
+  processContent,
+  downloadMarkdownFile,
+  ProcessResponse,
+  HealthResponse,
+  ConversionItem,
+} from "@/lib/api";
 
 export default function Home() {
   const [healthInfo, setHealthInfo] = useState<HealthResponse | null>(null);
   const [mode, setMode] = useState<ModeType>("strict");
   const [prompt, setPrompt] = useState<string>("Summarize the key information from the provided content.");
   const [files, setFiles] = useState<File[]>([]);
-  
+  const [conversions, setConversions] = useState<ConversionItem[]>([]);
+  const [combinedConversionId, setCombinedConversionId] = useState<string | undefined>(undefined);
+
+  const [isConverting, setIsConverting] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<
-    "idle" | "input" | "extraction" | "ai_engine" | "output" | "completed" | "failed"
+    "idle" | "input" | "conversion" | "image_context" | "markdown_ready" | "ai_engine" | "output" | "completed" | "failed"
   >("idle");
   const [lastResponse, setLastResponse] = useState<ProcessResponse | null>(null);
 
@@ -29,6 +40,67 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  // Automatic file to Markdown conversion effect upon file upload
+  useEffect(() => {
+    if (mode === "scratch" || files.length === 0) {
+      setConversions([]);
+      setCombinedConversionId(undefined);
+      if (currentStep !== "completed" && currentStep !== "failed" && !isProcessing) {
+        setCurrentStep("idle");
+      }
+      return;
+    }
+
+    let isMounted = true;
+
+    const performConversion = async () => {
+      setIsConverting(true);
+      setCurrentStep("conversion");
+
+      try {
+        const res = await convertFiles(files);
+        if (!isMounted) return;
+
+        setIsConverting(false);
+        if (res.success) {
+          setConversions(res.conversions);
+          setCombinedConversionId(res.combined_conversion_id);
+          setCurrentStep("markdown_ready");
+        } else {
+          setConversions([]);
+          setCombinedConversionId(undefined);
+          setCurrentStep("failed");
+          setLastResponse({
+            success: false,
+            mode,
+            error: res.error || "File conversion failed",
+            pipeline_step: "conversion",
+          });
+        }
+      } catch (err: any) {
+        if (!isMounted) return;
+        setIsConverting(false);
+        setCurrentStep("failed");
+        setLastResponse({
+          success: false,
+          mode,
+          error: err.message || "File conversion request error",
+          pipeline_step: "conversion",
+        });
+      }
+    };
+
+    performConversion();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [files, mode]);
+
+  const handleDownloadMarkdown = (conversionId: string, filename: string) => {
+    downloadMarkdownFile(conversionId, filename);
+  };
+
   const handleProcess = async () => {
     if (!prompt.trim() && mode === "scratch") {
       alert("Prompt is required in Scratch mode.");
@@ -39,20 +111,35 @@ export default function Home() {
       return;
     }
 
-    setIsProcessing(true);
-    setLastResponse(null);
-    setCurrentStep("input");
-
-    // Progressive step animation
-    if (files.length > 0 && mode !== "scratch") {
-      setTimeout(() => setCurrentStep("extraction"), 300);
-      setTimeout(() => setCurrentStep("ai_engine"), 700);
-    } else {
-      setTimeout(() => setCurrentStep("ai_engine"), 300);
+    if (mode !== "scratch" && files.length > 0 && conversions.length === 0 && !isConverting) {
+      // Trigger conversion first if needed
+      setIsConverting(true);
+      setCurrentStep("conversion");
+      const convRes = await convertFiles(files);
+      setIsConverting(false);
+      if (convRes.success) {
+        setConversions(convRes.conversions);
+        setCombinedConversionId(convRes.combined_conversion_id);
+        setCurrentStep("markdown_ready");
+      } else {
+        alert(`Conversion error: ${convRes.error}`);
+        return;
+      }
     }
 
+    setIsProcessing(true);
+    setLastResponse(null);
+    setCurrentStep("ai_engine");
+
     try {
-      const res = await processContent(mode, prompt, files);
+      const conversionIds = conversions.map((c) => c.id);
+      const res = await processContent(
+        mode,
+        prompt,
+        conversionIds.length > 0 ? undefined : files,
+        conversionIds.length > 0 ? conversionIds : undefined
+      );
+
       setLastResponse(res);
       setIsProcessing(false);
 
@@ -69,7 +156,11 @@ export default function Home() {
 
   const handleClearOutput = () => {
     setLastResponse(null);
-    setCurrentStep("idle");
+    if (conversions.length > 0) {
+      setCurrentStep("markdown_ready");
+    } else {
+      setCurrentStep("idle");
+    }
   };
 
   return (
@@ -88,8 +179,12 @@ export default function Home() {
             setPrompt={setPrompt}
             files={files}
             setFiles={setFiles}
+            conversions={conversions}
+            combinedConversionId={combinedConversionId}
+            isConverting={isConverting}
             onProcess={handleProcess}
             isProcessing={isProcessing}
+            onDownloadMarkdown={handleDownloadMarkdown}
           />
         </div>
 
@@ -100,6 +195,7 @@ export default function Home() {
             lastResponse={lastResponse}
             mode={mode}
             filesCount={files.length}
+            isConverting={isConverting}
           />
         </div>
 
@@ -114,4 +210,4 @@ export default function Home() {
       </main>
     </div>
   );
-};
+}

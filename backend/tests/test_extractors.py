@@ -93,11 +93,12 @@ def test_image_ocr_abstraction():
     assert res.metadata["width"] == 200
 
 
-def test_invalid_file_handling():
+@pytest.mark.asyncio
+async def test_invalid_file_handling():
     is_valid, err = ingestion_service.validate_file("file.exe", b"binary content")
     assert is_valid is False
     assert "Unsupported file type" in err
 
-    res = ingestion_service.process_file("invalid.xyz", b"abc")
+    res = await ingestion_service.process_file("invalid.xyz", b"abc")
     assert res.extraction_status == ExtractionStatus.FAILED
     assert "Unsupported file type" in res.error_message

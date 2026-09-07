@@ -40,4 +40,6 @@ class TextExtractor(BaseExtractor):
                 "word_count": word_count,
             },
             extraction_status=ExtractionStatus.SUCCESS if text else ExtractionStatus.PARTIAL,
+            extraction_method="text",
+            output_format="markdown",
         )

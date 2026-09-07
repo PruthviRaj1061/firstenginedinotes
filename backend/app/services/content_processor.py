@@ -1,5 +1,6 @@
 import logging
 from typing import List, Tuple, Optional
+from app.services.conversion_storage import conversion_storage
 from app.modules.ingestion.service import ingestion_service
 from app.modules.prompts.builder import prompt_builder
 from app.modules.ai_engine import get_ai_provider
@@ -8,6 +9,7 @@ from app.schemas.processing import (
     PipelineStep,
     ProcessResponse,
     ExtractionResult,
+    ConversionItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ContentProcessor:
     """
     Central orchestration service managing the processing pipeline lifecycle:
-    INPUT -> EXTRACTION -> AI ENGINE -> OUTPUT
+    INPUT -> CONVERSION / MARKDOWN READY -> AI ENGINE -> OUTPUT
     """
 
     async def process_request(
@@ -24,6 +26,7 @@ class ContentProcessor:
         mode_input: str,
         prompt: str,
         files: Optional[List[Tuple[str, bytes]]] = None,
+        conversion_ids: Optional[List[str]] = None,
     ) -> ProcessResponse:
         try:
             # 1. Validate Mode
@@ -39,6 +42,7 @@ class ContentProcessor:
 
             mode = ProcessingMode(mode_str)
             files = files or []
+            conversion_ids = [cid for cid in (conversion_ids or []) if cid and cid.strip()]
 
             # 2. Input Validation Rules
             if mode == ProcessingMode.SCRATCH and not prompt.strip():
@@ -57,33 +61,87 @@ class ContentProcessor:
                     pipeline_step=PipelineStep.INPUT,
                 )
 
-            # 3. Extraction Phase
+            # 3. Source Retrieval / Extraction Phase
             combined_source_content = ""
             extraction_results: List[ExtractionResult] = []
+            conversion_items: List[ConversionItem] = []
 
-            if files and mode != ProcessingMode.SCRATCH:
-                combined_source_content, extraction_results = ingestion_service.process_files_and_combine(files)
+            if mode != ProcessingMode.SCRATCH:
+                # Option A: Conversion IDs passed from prior conversion stage
+                if conversion_ids:
+                    combined_blocks = []
+                    for cid in conversion_ids:
+                        meta = conversion_storage.get_metadata(cid)
+                        md_text = conversion_storage.get_markdown_text(cid)
+                        if meta and md_text is not None:
+                            fname = meta.get("original_filename", "document")
+                            safe_filename = fname.replace("#", "")
+                            combined_blocks.append(f"# Source: {safe_filename}\n\n{md_text.strip()}")
 
-                # Check if file extraction had critical failures
-                failed_details = [
-                    f"'{res.filename}' ({res.error_message})" if res.error_message else f"'{res.filename}'"
-                    for res in extraction_results
-                    if res.extraction_status == "failed"
-                ]
-                if failed_details and not combined_source_content:
-                    return ProcessResponse(
-                        success=False,
-                        mode=mode.value,
-                        error=f"Failed to extract content from files — {'; '.join(failed_details)}",
-                        pipeline_step=PipelineStep.EXTRACTION,
+                            conversion_items.append(
+                                ConversionItem(
+                                    id=cid,
+                                    original_filename=fname,
+                                    markdown_filename=meta.get("markdown_filename", f"{fname}.md"),
+                                    source_size_bytes=meta.get("source_size_bytes", 0),
+                                    markdown_size_bytes=meta.get("markdown_size_bytes", len(md_text)),
+                                    char_count=meta.get("char_count", len(md_text)),
+                                    extraction_method=meta.get("extraction_method", "markitdown"),
+                                    output_format="markdown",
+                                    fallback_used=meta.get("fallback_used", False),
+                                    error_message=meta.get("error_message"),
+                                    text=md_text if len(md_text) <= 2000 else None,
+                                )
+                            )
+                    combined_source_content = "\n\n---\n\n".join(combined_blocks).strip()
+
+                # Option B: Files directly passed in process request
+                elif files:
+                    combined_source_content, extraction_results, combined_id = (
+                        await ingestion_service.process_files_and_combine(files)
                     )
 
-            if mode == ProcessingMode.STRICT and files and not combined_source_content:
+                    # Build conversion items from extraction results
+                    for res in extraction_results:
+                        if res.id:
+                            meta = conversion_storage.get_metadata(res.id)
+                            if meta:
+                                conversion_items.append(
+                                    ConversionItem(
+                                        id=res.id,
+                                        original_filename=res.filename,
+                                        markdown_filename=meta.get("markdown_filename", f"{res.filename}.md"),
+                                        source_size_bytes=meta.get("source_size_bytes", 0),
+                                        markdown_size_bytes=meta.get("markdown_size_bytes", len(res.text)),
+                                        char_count=len(res.text),
+                                        extraction_method=res.extraction_method,
+                                        output_format="markdown",
+                                        fallback_used=res.fallback_used,
+                                        error_message=res.error_message,
+                                        text=res.text if len(res.text) <= 2000 else None,
+                                    )
+                                )
+
+                    # Check for failures if no content was extracted
+                    failed_details = [
+                        f"'{res.filename}' ({res.error_message})" if res.error_message else f"'{res.filename}'"
+                        for res in extraction_results
+                        if res.extraction_status == "failed"
+                    ]
+                    if failed_details and not combined_source_content:
+                        return ProcessResponse(
+                            success=False,
+                            mode=mode.value,
+                            error=f"Failed to extract content from files — {'; '.join(failed_details)}",
+                            pipeline_step=PipelineStep.CONVERSION,
+                        )
+
+            if mode == ProcessingMode.STRICT and (files or conversion_ids) and not combined_source_content:
                 return ProcessResponse(
                     success=False,
                     mode=mode.value,
                     error="Strict Mode requires readable source content from uploaded files, but no text could be extracted.",
-                    pipeline_step=PipelineStep.EXTRACTION,
+                    pipeline_step=PipelineStep.CONVERSION,
                 )
 
             # 4. Prompt Builder Phase
@@ -105,21 +163,27 @@ class ContentProcessor:
             # 6. Success Output Response
             file_summaries = [
                 {
-                    "filename": r.filename,
-                    "file_type": r.file_type,
-                    "status": r.extraction_status.value,
-                    "char_count": len(r.text),
-                    "metadata": r.metadata,
+                    "filename": item.original_filename,
+                    "file_type": item.original_filename.split(".")[-1] if "." in item.original_filename else "txt",
+                    "status": "success",
+                    "char_count": item.char_count,
+                    "extraction_method": item.extraction_method,
+                    "output_format": item.output_format,
+                    "fallback_used": item.fallback_used,
+                    "text": item.text,
+                    "metadata": {"conversion_id": item.id},
                 }
-                for r in extraction_results
+                for item in conversion_items
             ]
 
             return ProcessResponse(
                 success=True,
                 mode=mode.value,
                 content=generated_output,
+                source_markdown=combined_source_content if combined_source_content else None,
                 pipeline_step=PipelineStep.OUTPUT,
                 extracted_files=file_summaries if file_summaries else None,
+                conversions=conversion_items if conversion_items else None,
             )
 
         except Exception as e:
@@ -133,3 +197,4 @@ class ContentProcessor:
 
 
 content_processor = ContentProcessor()
+

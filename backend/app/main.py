@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.endpoints.process import router as process_router, health_check
+from app.api.v1.endpoints.convert import router as convert_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -18,8 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API Router
+# Include API Routers
 app.include_router(process_router, prefix=settings.API_V1_STR, tags=["Processing"])
+app.include_router(convert_router, prefix=settings.API_V1_STR, tags=["Conversion"])
 
 # Expose top-level /health endpoint
 app.add_api_route("/health", health_check, methods=["GET"], tags=["Health"])

@@ -48,6 +48,7 @@ class PdfExtractor(BaseExtractor):
 
             full_text = "\n\n".join(page_contents).strip()
 
+            method = "ocr" if ocr_pages_count > 0 else "pymupdf"
             return ExtractionResult(
                 filename=filename,
                 file_type="pdf",
@@ -59,6 +60,8 @@ class PdfExtractor(BaseExtractor):
                     "char_count": len(full_text),
                 },
                 extraction_status=ExtractionStatus.SUCCESS if full_text else ExtractionStatus.PARTIAL,
+                extraction_method=method,
+                output_format="markdown",
             )
         except Exception as e:
             return ExtractionResult(

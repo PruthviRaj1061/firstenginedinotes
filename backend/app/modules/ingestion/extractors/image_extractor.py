@@ -36,6 +36,8 @@ class ImageExtractor(BaseExtractor):
                     "ocr_engine_available": ocr_engine.is_available,
                 },
                 extraction_status=status,
+                extraction_method="ocr",
+                output_format="markdown",
             )
         except Exception as e:
             return ExtractionResult(

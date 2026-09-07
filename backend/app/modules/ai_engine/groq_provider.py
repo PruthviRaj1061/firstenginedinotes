@@ -1,40 +1,57 @@
 import logging
-from openai import AsyncOpenAI
 from app.core.config import settings
 from app.modules.ai_engine.base import AIProvider
 
 logger = logging.getLogger(__name__)
 
+try:
+    from groq import AsyncGroq
+    HAS_GROQ_PKG = True
+except ImportError:
+    AsyncGroq = None
+    HAS_GROQ_PKG = False
 
-class OpenAIProvider(AIProvider):
+from openai import AsyncOpenAI
+
+
+class GroqProvider(AIProvider):
     """
-    OpenAI LLM provider using official AsyncOpenAI client.
+    Groq LLM provider using official AsyncGroq or AsyncOpenAI client targeting Groq API.
     """
 
     def __init__(self, api_key: str = "", model_name: str = ""):
-        self.api_key = api_key or settings.OPENAI_API_KEY
-        self.model_name = model_name or settings.DEFAULT_MODEL
+        self.api_key = (api_key or settings.GROQ_API_KEY).strip()
+        self.model_name = model_name or settings.DEFAULT_MODEL or "openai/gpt-oss-120b"
+
         if self.api_key:
-            self.client = AsyncOpenAI(api_key=self.api_key)
+            if HAS_GROQ_PKG:
+                self.client = AsyncGroq(api_key=self.api_key)
+            else:
+                self.client = AsyncOpenAI(
+                    api_key=self.api_key,
+                    base_url="https://api.groq.com/openai/v1"
+                )
         else:
             self.client = None
 
     @property
     def provider_name(self) -> str:
-        return f"openai ({self.model_name})"
+        return f"groq ({self.model_name})"
 
     @property
     def supports_vision(self) -> bool:
-        return self.client is not None
+        if not self.client:
+            return False
+        return "vision" in self.model_name.lower() or "llama-3.2" in self.model_name.lower()
 
     async def generate(self, prompt: str, system_instruction: str = "") -> str:
         if not self.client:
-            raise ValueError("OpenAI API key is not configured.")
+            raise ValueError("Groq API key (GROQ_API_KEY) is not configured.")
 
         messages = []
-        if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
-        
+        if system_instruction and system_instruction.strip():
+            messages.append({"role": "system", "content": system_instruction.strip()})
+
         messages.append({"role": "user", "content": prompt})
 
         try:
@@ -43,19 +60,19 @@ class OpenAIProvider(AIProvider):
                 messages=messages,
                 temperature=0.3,
             )
-            
+
             output_text = response.choices[0].message.content or ""
             return output_text.strip()
 
         except Exception as e:
-            logger.error(f"OpenAI API call failed: {str(e)}")
+            logger.error(f"Groq API call failed: {str(e)}")
             raise RuntimeError(f"AI Provider error: {str(e)}")
 
     async def generate_with_vision(
         self, image_bytes: bytes, prompt: str, system_instruction: str = ""
     ) -> str:
-        if not self.client:
-            raise ValueError("OpenAI API key is not configured.")
+        if not self.supports_vision:
+            raise NotImplementedError(f"Groq model '{self.model_name}' does not support vision analysis.")
 
         import base64
         base64_img = base64.b64encode(image_bytes).decode("utf-8")
@@ -82,6 +99,6 @@ class OpenAIProvider(AIProvider):
             output_text = response.choices[0].message.content or ""
             return output_text.strip()
         except Exception as e:
-            logger.error(f"OpenAI Vision API call failed: {str(e)}")
-            raise RuntimeError(f"OpenAI Vision error: {str(e)}")
+            logger.error(f"Groq Vision API call failed: {str(e)}")
+            raise RuntimeError(f"Groq Vision error: {str(e)}")
 
