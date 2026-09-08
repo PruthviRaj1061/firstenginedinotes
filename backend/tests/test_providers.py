@@ -55,6 +55,8 @@ def test_grok_provider_initialization_and_vision_support():
 
 def test_get_ai_provider_grok_precedence(monkeypatch):
     from app.core.config import settings
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "")
     monkeypatch.setattr(settings, "GROK_API_KEY", "test_grok_key")
     monkeypatch.setattr(settings, "XAI_API_KEY", "")
     provider = get_ai_provider()
