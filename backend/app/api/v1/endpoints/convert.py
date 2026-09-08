@@ -67,7 +67,10 @@ async def convert_files(
                     fallback_used=res.fallback_used,
                     error_message=res.error_message,
                     image_count=res.image_count,
+                    images_filtered=res.images_filtered,
+                    images_unique=res.images_unique,
                     images_analyzed=res.images_analyzed,
+                    images_unavailable=res.images_unavailable,
                     image_context_method=res.image_context_method,
                     text=res.text if len(res.text) <= 2000 else None,  # Snippet preview if small
                 )

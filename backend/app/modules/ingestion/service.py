@@ -114,21 +114,40 @@ class ContentIngestionService:
 
         # 3. Embedded Image Extraction & Image Understanding Analysis
         image_items: List[ExtractedImageItem] = []
-        if ext == ".pdf":
-            image_items = extract_images_from_pdf(file_bytes)
-        elif ext == ".docx":
-            image_items = extract_images_from_docx(file_bytes)
-        elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
-            image_items = extract_images_from_standalone_image(file_bytes, filename)
+        extraction_stats: dict = {"images_detected": 0, "images_filtered": 0, "images_unique": 0}
 
-        if image_items and extraction_result.text:
-            enriched_text, img_meta = await image_understanding_service.analyze_and_enrich_markdown(
-                extraction_result.text, image_items
-            )
-            extraction_result.text = enriched_text
-            extraction_result.image_count = img_meta["image_count"]
-            extraction_result.images_analyzed = img_meta["images_analyzed"]
-            extraction_result.image_context_method = img_meta["image_context_method"]
+        try:
+            if ext == ".pdf":
+                from app.modules.ingestion.image_extractor_utils import extract_images_with_stats_from_pdf
+                image_items, extraction_stats = extract_images_with_stats_from_pdf(file_bytes)
+            elif ext == ".docx":
+                image_items = extract_images_from_docx(file_bytes)
+                extraction_stats = {
+                    "images_detected": len(image_items),
+                    "images_filtered": 0,
+                    "images_unique": len(set(i.md5_hash for i in image_items)),
+                }
+            elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
+                image_items = extract_images_from_standalone_image(file_bytes, filename)
+                extraction_stats = {
+                    "images_detected": len(image_items),
+                    "images_filtered": 0,
+                    "images_unique": len(image_items),
+                }
+
+            if (image_items or extraction_stats.get("images_detected", 0) > 0) and extraction_result.text:
+                enriched_text, img_meta = await image_understanding_service.analyze_and_enrich_markdown(
+                    markdown_text=extraction_result.text,
+                    image_items=image_items,
+                    extraction_stats=extraction_stats,
+                    filename=filename,
+                )
+                extraction_result.text = enriched_text
+                extraction_result.image_count = img_meta.get("image_count", 0)
+                extraction_result.images_analyzed = img_meta.get("images_analyzed", 0)
+                extraction_result.image_context_method = img_meta.get("image_context_method", "none")
+        except Exception as img_err:
+            logger.error(f"[INGESTION] Image understanding pipeline error for '{filename}': {img_err}. Document text conversion remains valid.")
 
         # 4. Store converted Markdown artifact for user download
         if extraction_result.text and extraction_result.text.strip():

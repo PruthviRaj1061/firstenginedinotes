@@ -90,6 +90,12 @@ class ContentProcessor:
                                     output_format="markdown",
                                     fallback_used=meta.get("fallback_used", False),
                                     error_message=meta.get("error_message"),
+                                    image_count=meta.get("image_count", 0),
+                                    images_filtered=meta.get("images_filtered", 0),
+                                    images_unique=meta.get("images_unique", 0),
+                                    images_analyzed=meta.get("images_analyzed", 0),
+                                    images_unavailable=meta.get("images_unavailable", 0),
+                                    image_context_method=meta.get("image_context_method", "none"),
                                     text=md_text if len(md_text) <= 2000 else None,
                                 )
                             )
@@ -118,6 +124,12 @@ class ContentProcessor:
                                         output_format="markdown",
                                         fallback_used=res.fallback_used,
                                         error_message=res.error_message,
+                                        image_count=res.image_count,
+                                        images_filtered=res.images_filtered,
+                                        images_unique=res.images_unique,
+                                        images_analyzed=res.images_analyzed,
+                                        images_unavailable=res.images_unavailable,
+                                        image_context_method=res.image_context_method,
                                         text=res.text if len(res.text) <= 2000 else None,
                                     )
                                 )

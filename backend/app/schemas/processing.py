@@ -36,7 +36,10 @@ class ExtractionResult(BaseModel):
     output_format: str = "markdown"
     fallback_used: bool = False
     image_count: int = 0
+    images_filtered: int = 0
+    images_unique: int = 0
     images_analyzed: int = 0
+    images_unavailable: int = 0
     image_context_method: str = "none"
 
 
@@ -54,7 +57,10 @@ class ConversionItem(BaseModel):
     created_at: Optional[float] = None
     text: Optional[str] = None
     image_count: int = 0
+    images_filtered: int = 0
+    images_unique: int = 0
     images_analyzed: int = 0
+    images_unavailable: int = 0
     image_context_method: str = "none"
 
 

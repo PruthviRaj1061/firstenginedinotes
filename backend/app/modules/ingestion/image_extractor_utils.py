@@ -3,7 +3,7 @@ import os
 import zipfile
 import hashlib
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
 from PIL import Image
 
@@ -88,17 +88,20 @@ def is_meaningful_image(w: int, h: int, byte_length: int) -> bool:
     return w >= MIN_IMAGE_WIDTH and h >= MIN_IMAGE_HEIGHT and byte_length >= MIN_IMAGE_BYTES
 
 
-def extract_images_from_pdf(file_bytes: bytes) -> List[ExtractedImageItem]:
+def extract_images_with_stats_from_pdf(file_bytes: bytes) -> Tuple[List[ExtractedImageItem], dict]:
     """
     Extracts embedded images from PDF document using PyMuPDF (fitz).
-    Captures page numbers, image indices, dimensions, and MD5 hashes.
+    Returns (extracted_images_list, extraction_stats_dict).
     """
     if not PYMUPDF_AVAILABLE:
         logger.warning("[IMAGE_EXTRACTOR] PyMuPDF (fitz) not available for PDF image extraction.")
-        return []
+        return [], {"images_detected": 0, "images_filtered": 0, "images_unique": 0}
 
     images: List[ExtractedImageItem] = []
     global_index = 1
+    total_detected = 0
+    total_filtered = 0
+    seen_hashes = set()
 
     try:
         doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -108,29 +111,37 @@ def extract_images_from_pdf(file_bytes: bytes) -> List[ExtractedImageItem]:
             image_info_list = page.get_images(full=True)
 
             for img_idx, img_info in enumerate(image_info_list):
+                total_detected += 1
                 xref = img_info[0]
                 try:
                     base_image = doc.extract_image(xref)
                     img_bytes = base_image.get("image")
-                    img_ext = base_image.get("ext", "png")
+                    img_ext = (base_image.get("ext") or "png").lower()
                     w = base_image.get("width", 0)
                     h = base_image.get("height", 0)
 
                     if not img_bytes:
+                        total_filtered += 1
                         continue
 
-                    # If dimensions are missing from PyMuPDF, check via PIL
-                    if w == 0 or h == 0:
-                        try:
-                            pil_img = Image.open(io.BytesIO(img_bytes))
-                            w, h = pil_img.size
-                        except Exception:
-                            pass
+                    # Validate bytes with PIL
+                    try:
+                        pil_img = Image.open(io.BytesIO(img_bytes))
+                        pil_w, pil_h = pil_img.size
+                        if w == 0 or h == 0:
+                            w, h = pil_w, pil_h
+                        if not img_ext or img_ext == "png":
+                            img_ext = (pil_img.format or "png").lower()
+                    except Exception as pil_err:
+                        logger.warning(f"[IMAGE_EXTRACTOR] PIL validation failed for PDF image xref {xref}: {pil_err}")
+                        total_filtered += 1
+                        continue
 
                     if is_meaningful_image(w, h, len(img_bytes)):
                         resized_bytes = resize_image_if_needed(img_bytes)
                         md5 = compute_md5_hash(img_bytes)
                         context_label = f"Image {global_index} — Page {page_num}"
+                        seen_hashes.add(md5)
 
                         images.append(
                             ExtractedImageItem(
@@ -145,13 +156,31 @@ def extract_images_from_pdf(file_bytes: bytes) -> List[ExtractedImageItem]:
                             )
                         )
                         global_index += 1
+                    else:
+                        total_filtered += 1
                 except Exception as img_err:
                     logger.warning(f"[IMAGE_EXTRACTOR] Failed to extract PDF image xref {xref}: {img_err}")
+                    total_filtered += 1
 
         doc.close()
     except Exception as e:
         logger.error(f"[IMAGE_EXTRACTOR] PDF image extraction error: {e}")
 
+    stats = {
+        "images_detected": total_detected,
+        "images_filtered": total_filtered,
+        "images_unique": len(seen_hashes),
+    }
+
+    return images, stats
+
+
+def extract_images_from_pdf(file_bytes: bytes) -> List[ExtractedImageItem]:
+    """
+    Extracts embedded images from PDF document using PyMuPDF (fitz).
+    Captures page numbers, image indices, dimensions, and MD5 hashes.
+    """
+    images, _ = extract_images_with_stats_from_pdf(file_bytes)
     return images
 
 

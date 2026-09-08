@@ -14,7 +14,10 @@ export interface ConversionItem {
   created_at?: number;
   text?: string;
   image_count?: number;
+  images_filtered?: number;
+  images_unique?: number;
   images_analyzed?: number;
+  images_unavailable?: number;
   image_context_method?: string;
 }
 

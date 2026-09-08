@@ -263,12 +263,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                       </div>
 
                       {item.image_count !== undefined && item.image_count > 0 && (
-                        <div className="flex items-center justify-between text-[10px] bg-purple-950/30 border border-purple-500/20 px-2 py-1 rounded text-purple-300 font-mono">
+                        <div
+                          className="flex items-center justify-between text-[10px] bg-purple-950/30 border border-purple-500/20 px-2 py-1 rounded text-purple-300 font-mono"
+                          title={`Detected: ${item.image_count} | Filtered: ${item.images_filtered ?? 0} | Unique: ${item.images_unique ?? 0} | Analyzed: ${item.images_analyzed ?? 0}`}
+                        >
                           <span className="flex items-center gap-1">
                             <ImageIcon className="w-3 h-3 text-purple-400" />
                             <span>Images: {item.images_analyzed ?? 0}/{item.image_count} analyzed</span>
                           </span>
-                          <span className="text-purple-400 font-semibold">{item.image_context_method || "Vision"}</span>
+                          <span className="text-purple-400 font-semibold uppercase">{item.image_context_method || "unavailable"}</span>
                         </div>
                       )}
 

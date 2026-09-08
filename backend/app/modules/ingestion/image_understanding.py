@@ -84,11 +84,21 @@ class ImageUnderstandingService:
             if provider.supports_vision:
                 try:
                     logger.info(f"[IMAGE_UNDERSTANDING] Invoking Vision model '{provider.provider_name}' for {item.context_label}")
-                    vision_desc = await provider.generate_with_vision(
-                        image_bytes=item.image_bytes,
-                        prompt=VISION_ANALYSIS_PROMPT,
-                        system_instruction=VISION_SYSTEM_INSTRUCTION,
-                    )
+                    
+                    # Call generate_with_vision (support image_format if provider signature allows)
+                    try:
+                        vision_desc = await provider.generate_with_vision(
+                            image_bytes=item.image_bytes,
+                            prompt=VISION_ANALYSIS_PROMPT,
+                            system_instruction=VISION_SYSTEM_INSTRUCTION,
+                            image_format=item.original_format,
+                        )
+                    except TypeError:
+                        vision_desc = await provider.generate_with_vision(
+                            image_bytes=item.image_bytes,
+                            prompt=VISION_ANALYSIS_PROMPT,
+                            system_instruction=VISION_SYSTEM_INSTRUCTION,
+                        )
 
                     clean_desc = (vision_desc or "").strip()
                     if clean_desc and not clean_desc.startswith("[ERROR"):
@@ -142,18 +152,33 @@ class ImageUnderstandingService:
         markdown_text: str,
         image_items: List[ExtractedImageItem],
         provider: Optional[AIProvider] = None,
+        extraction_stats: Optional[Dict[str, int]] = None,
+        filename: str = "document",
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Analyzes embedded images in parallel (with bounded concurrency) and integrates
         their semantic visual context into the canonical Markdown document.
         Returns (enriched_markdown, metadata_dict).
         """
+        stats = extraction_stats or {}
+        detected = stats.get("images_detected", len(image_items))
+        filtered = stats.get("images_filtered", 0)
+        unique = stats.get("images_unique", len(set(item.md5_hash for item in image_items)))
+
         if not image_items:
-            return markdown_text, {
-                "image_count": 0,
+            metadata = {
+                "image_count": detected,
+                "images_filtered": filtered,
+                "images_unique": 0,
                 "images_analyzed": 0,
-                "image_context_method": "none",
+                "images_unavailable": 0,
+                "image_context_method": "none" if detected == 0 else "unavailable",
             }
+            logger.info(
+                f"[IMAGE_PIPELINE] file={filename} detected={detected} filtered={filtered} unique=0 "
+                f"provider=none model=none supports_vision=false vision_successes=0 ocr_successes=0 unavailable=0 analyzed=0"
+            )
+            return markdown_text, metadata
 
         ai_provider = provider or get_ai_provider()
         hash_cache: Dict[str, Tuple[str, str]] = {}
@@ -166,6 +191,9 @@ class ImageUnderstandingService:
         results: List[ImageContextResult] = await asyncio.gather(*tasks)
 
         analyzed_count = sum(1 for r in results if r.status == "success" and r.description.strip())
+        vision_successes = sum(1 for r in results if r.status == "success" and r.method == "vision")
+        ocr_successes = sum(1 for r in results if r.status == "success" and r.method == "ocr")
+        unavailable_count = sum(1 for r in results if r.status != "success" or not r.description.strip())
         methods_used = set(r.method for r in results if r.status == "success" and r.description.strip())
 
         if "vision" in methods_used and "ocr" in methods_used:
@@ -175,13 +203,14 @@ class ImageUnderstandingService:
         elif "ocr" in methods_used:
             image_context_method = "ocr"
         else:
-            image_context_method = "unavailable" if not ai_provider.supports_vision else "none"
+            image_context_method = "unavailable"
 
         # Format visual context Markdown blocks
         image_blocks: List[str] = []
         for res in results:
             if res.status == "success" and res.description.strip():
-                block = f"### {res.context_label}\n\n**Image Context:**\n\n{res.description.strip()}"
+                method_badge = " (OCR)" if res.method == "ocr" else ""
+                block = f"### {res.context_label}\n\n**Image Context{method_badge}:**\n\n{res.description.strip()}"
                 image_blocks.append(block)
 
         enriched_markdown = markdown_text.strip()
@@ -191,13 +220,19 @@ class ImageUnderstandingService:
             enriched_markdown = f"{enriched_markdown}\n\n---\n\n{visual_section}".strip()
 
         metadata = {
-            "image_count": len(image_items),
+            "image_count": detected,
+            "images_filtered": filtered,
+            "images_unique": unique,
             "images_analyzed": analyzed_count,
+            "images_unavailable": unavailable_count,
             "image_context_method": image_context_method,
         }
 
+        model_name = getattr(ai_provider, "model_name", "unknown")
         logger.info(
-            f"[IMAGE_UNDERSTANDING] Enriched Markdown with {analyzed_count}/{len(image_items)} images analyzed (method={image_context_method})"
+            f"[IMAGE_PIPELINE] file={filename} detected={detected} filtered={filtered} unique={unique} "
+            f"provider={ai_provider.provider_name} model={model_name} supports_vision={ai_provider.supports_vision} "
+            f"vision_successes={vision_successes} ocr_successes={ocr_successes} unavailable={unavailable_count} analyzed={analyzed_count}"
         )
         return enriched_markdown, metadata
 

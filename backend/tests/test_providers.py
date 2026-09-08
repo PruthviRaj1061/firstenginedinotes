@@ -43,4 +43,22 @@ def test_groq_provider_initialization():
     assert provider.client is not None
 
 
+def test_grok_provider_initialization_and_vision_support():
+    from app.modules.ai_engine.grok_provider import GrokProvider
+    vision_grok = GrokProvider(api_key="test_xai_key", model_name="grok-2-vision-1212")
+    assert vision_grok.provider_name == "grok (grok-2-vision-1212)"
+    assert vision_grok.supports_vision is True
+
+    text_grok = GrokProvider(api_key="test_xai_key", model_name="grok-2")
+    assert text_grok.supports_vision is False
+
+
+def test_get_ai_provider_grok_precedence(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "GROK_API_KEY", "test_grok_key")
+    monkeypatch.setattr(settings, "XAI_API_KEY", "")
+    provider = get_ai_provider()
+    assert "grok" in provider.provider_name
+
+
 

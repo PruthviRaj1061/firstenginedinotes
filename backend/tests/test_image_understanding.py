@@ -191,3 +191,41 @@ def test_anti_hallucination_prompt_content():
     assert "Describe ONLY information that is directly visible" in VISION_SYSTEM_INSTRUCTION
     assert "CRITICAL SECURITY RULE" in VISION_SYSTEM_INSTRUCTION
     assert "unreadable" in VISION_SYSTEM_INSTRUCTION
+
+
+@pytest.mark.asyncio
+async def test_image_understanding_resilience_when_vision_fails():
+    """Verify Markdown creation succeeds even if vision provider fails and OCR is unavailable."""
+    class FailingVisionProvider(MockProvider):
+        @property
+        def supports_vision(self) -> bool:
+            return True
+
+        async def generate_with_vision(self, image_bytes: bytes, prompt: str, system_instruction: str = "", image_format: str = "png") -> str:
+            raise RuntimeError("Simulated Vision API failure")
+
+    failing_provider = FailingVisionProvider()
+    service = ImageUnderstandingService()
+
+    dummy_item = ExtractedImageItem(
+        image_bytes=b"dummy_bytes_data",
+        page_number=1,
+        image_index=1,
+        width=200,
+        height=200,
+        md5_hash=compute_md5_hash(b"dummy_bytes_data"),
+        context_label="Image 1 — Page 1",
+    )
+
+    initial_md = "# Resilient Document\nDocument body text."
+    enriched_md, meta = await service.analyze_and_enrich_markdown(
+        markdown_text=initial_md,
+        image_items=[dummy_item],
+        provider=failing_provider,
+    )
+
+    # Document text MUST remain intact
+    assert "Document body text." in enriched_md
+    # Unavailable metadata metric is correctly tracked
+    assert meta["image_context_method"] == "unavailable"
+    assert meta["images_analyzed"] == 0
