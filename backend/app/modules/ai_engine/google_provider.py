@@ -19,12 +19,12 @@ class GoogleGeminiProvider(AIProvider):
 
     def __init__(self, api_key: str = "", model_name: str = ""):
         self.api_key = (api_key or settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY).strip()
-        raw_model = (model_name or settings.DEFAULT_MODEL or "gemini-1.5-flash").strip()
+        raw_model = (model_name or settings.DEFAULT_MODEL or "gemini-3.6-flash").strip()
         clean_model = raw_model.replace("models/", "")
         
-        # If configured DEFAULT_MODEL belongs to another provider (e.g. openai/..., grok-..., etc.), fallback to gemini-1.5-flash
+        # If configured DEFAULT_MODEL belongs to another provider (e.g. openai/..., grok-..., etc.), fallback to gemini-3.6-flash
         if "gemini" not in clean_model.lower():
-            clean_model = "gemini-1.5-flash"
+            clean_model = "gemini-3.6-flash"
 
         self.model_name = clean_model
 
